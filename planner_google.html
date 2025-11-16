@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>K+F Feladatkezelő (Google Sheets V1)</title>
+    <!-- Tailwind CSS betöltése a gyors és szép stílusért -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Inter betűtípus beállítása */
+        body { font-family: 'Inter', sans-serif; }
+        /* Kis animáció a betöltéskor */
+        .task-card, .project-card { animation: fadeIn 0.3s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        /* A "select" mezők egységesítése */
+        select {
+            background-image: url('data:image/svg+xml;charset=utf-8,<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 20"><path stroke="%236B7280" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6 8l4 4 4-4"/></svg>');
+            background-position: right 0.5rem center;
+            background-repeat: no-repeat;
+            background-size: 1.5em 1.5em;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+        }
+    </style>
+    <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <!-- FŐ TARTÁLY -->
+    <div class="container max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+
+        <!-- FEJLÉC ÉS NÉZETVÁLTÓ -->
+        <header class="mb-6 flex flex-col sm:flex-row justify-between items-center">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900">K+F Feladatkezelő</h1>
+                <p id="welcomeMessage" class="text-gray-600">Betöltés...</p>
+            </div>
+            <div class="flex items-center space-x-4">
+                <!-- FELHASZNÁLÓVÁLASZTÓ (A SharePoint-os automatikus felismerés helyett) -->
+                <div>
+                    <label for="userSelect" class="text-sm font-medium text-gray-700">Ki vagy te?</label>
+                    <select id="userSelect" class="ml-2 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                        <option value="">Válassz...</option>
+                        <!-- A nevek a Google Sheet 'Felelos' oszlopa alapján töltődnek be -->
+                    </select>
+                </div>
+                <button id="toggleViewBtn" class="py-2 px-4 rounded-md font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    Váltás Csoportvezetői Nézetre
+                </button>
+            </div>
+        </header>
+
+        <!-- BETÖLTÉS JELZŐ (Mostantól van egy globális, teljes oldalas is) -->
+        <div id="globalLoader" class="hidden fixed inset-0 bg-white bg-opacity-75 flex items-center justify-center z-50">
+            <div class="text-center">
+                <svg class="animate-spin h-8 w-8 text-indigo-600 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <p class="text-lg text-gray-700 mt-2">Művelet folyamatban...</p>
+            </div>
+        </div>
+        
+        <!-- HIBAÜZENET HELYE -->
+        <div id="errorMessage" class="hidden bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-md mb-6" role="alert">
+            <strong class="font-bold">Hiba!</strong>
+            <span id="errorText" class="block sm:inline"></span>
+        </div>
+
+        <!-- 
+            NÉZET 1: "SAJÁT FELADATAIM" (Alapértelmezett)
+            A 'userSelect' alapján szűrve, Prioritás szerint rendezve.
+        -->
+        <main id="myTasksView">
+            <h2 class="text-2xl font-semibold mb-4 text-gray-800">Saját Priorizált Feladataim</h2>
+            <div id="myTasksList" class="space-y-4">
+                <p class="text-gray-500 text-center py-4">Kérlek, válassz egy felhasználót a jobb felső sarokban a feladataid megjelenítéséhez.</p>
+            </div>
+        </main>
+
+        <!-- 
+            NÉZET 2: "CSOPORTVEZETŐI NÉZET" (Projekt Térkép)
+            Projektek listázása, majd egy projektre kattintva annak összes feladatának kezelése.
+        -->
+        <main id="leaderView" class="hidden">
+            
+            <!-- Projekt Lista és Új Projekt Gomb -->
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-2xl font-semibold text-gray-800">Projektek</h2>
+                <button id="showNewTaskFormBtn" class="py-2 px-4 text-sm rounded-md font-medium text-white bg-blue-600 hover:bg-blue-700">+ Új Feladat Létrehozása</button>
+            </div>
+
+            <!-- Projekt kártyák helye -->
+            <div id="projectList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+                <!-- A Projekt kártyák ide kerülnek JavaScript segítségével -->
+            </div>
+
+            <!-- Új Feladat Űrlap (rejtett, mostantól felugró ablak lesz) -->
+            <div id="taskModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-30">
+                <div class="relative top-20 mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-md bg-white">
+                    <form id="taskForm">
+                        <h3 id="modalTitle" class="text-lg font-medium mb-4">Új Feladat Létrehozása</h3>
+                        <input type="hidden" id="taskID" />
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="md:col-span-2">
+                                <label for="taskProjekt" class="block text-sm font-medium text-gray-700">Projekt*</label>
+                                <!-- Itt egy sima beviteli mező lesz, amit a kód 'autocomplete'-tel segít -->
+                                <input type="text" id="taskProjekt" required list="projectDataList" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                <datalist id="projectDataList"></datalist>
+                                <p class="text-xs text-gray-500 mt-1">Gépelj a szűréshez, vagy írj be új projektnevet.</p>
+                            </div>
+
+                            <div class="md:col-span-2">
+                                <label for="taskFeladatCim" class="block text-sm font-medium text-gray-700">Feladat Címe*</label>
+                                <input type="text" id="taskFeladatCim" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                            </div>
+                            
+                            <div>
+                                <label for="taskFelelos" class="block text-sm font-medium text-gray-700">Felelős*</label>
+                                <select id="taskFelelos" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                    <!-- A felhasználók ide kerülnek JavaScript segítségével -->
+                                </select>
+                            </div>
+
+                            <div>
+                                <label for="taskPrioritas" class="block text-sm font-medium text-gray-700">Prioritás* (kisebb = sürgősebb)</label>
+                                <input type="number" id="taskPrioritas" value="10" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                            </div>
+
+                            <div>
+                                <label for="taskBecsultOra" class="block text-sm font-medium text-gray-700">Becsült Óraszám</label>
+                                <input type="number" id="taskBecsultOra" value="0" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                            </div>
+
+                            <div>
+                                <label for="taskFuggoseg_ID" class="block text-sm font-medium text-gray-700">Függőség (Opcionális)</label>
+                                <select id="taskFuggoseg_ID" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                    <option value="">Nincs</option>
+                                    <!-- A projekt többi feladata ide kerül JavaScript segítségével -->
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="flex justify-end gap-2 pt-6">
+                            <button type="button" id="cancelTaskBtn" class="py-2 px-4 rounded-md font-medium text-gray-700 bg-gray-100 hover:bg-gray-200">Mégse</button>
+                            <button type="submit" class="py-2 px-4 rounded-md font-medium text-white bg-blue-600 hover:bg-blue-700">Mentés</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- A kiválasztott projekt feladatainak listája -->
+            <div id="projectTasksList" class="space-y-4">
+                <!-- A Csoportvezetői nézet feladat kártyái ide kerülnek -->
+            </div>
+        </main>
+
+    </div>
+
+    <!-- 
+    ====================================================================
+    ALKALMAZÁS LOGIKA (JAVASCRIPT)
+    ====================================================================
+    -->
+    <script type="module">
+        
+        // ===================================================================
+        // === 1. KONFIGURÁCIÓ: EZ MÁR BE VAN ÁLLÍTVA! ===
+        // ===================================================================
+        
+        // Az az URL, amit az Apps Script "Telepítés" gombja adott.
+        const API_URL = "https://script.google.com/macros/s/AKfycbwHNyf6fZcjO-4DMW48drPVilfzAsTsLo9ujPd36qOyIZSykZtEz8gfpcSwu3ix3cy2/exec";
+        
+        // A Google Sheet oszlopnevei (ahogy az útmutatóban létrehoztuk)
+        const FIELDS = {
+            ID: "ID",
+            Projekt: "Projekt",
+            FeladatCim: "FeladatCim",
+            Felelos: "Felelos",
+            Statusz: "Statusz",
+            Prioritas: "Prioritas",
+            Fuggoseg_ID: "Fuggoseg_ID",
+            BecsultOra: "BecsultOra",
+            ValosOra: "ValosOra"
+        };
+        // ===================================================================
+        // === VÉGE: KONFIGURÁCIÓ ===
+        // ===================================================================
+
+
+        // === ÁLLAPOT VÁLTOZÓK ===
+        let currentView = 'myTasks'; // 'myTasks' vagy 'leader'
+        let currentUser = null; // Aktuális felhasználó NEVE (a legördülőből)
+        let siteUsers = []; // Az összes egyedi 'Felelos' név
+        let allProjects = []; // Az összes egyedi 'Projekt' név
+        let allTasks = []; // A Google Sheet 'FELADATOK' lapjának teljes tartalma
+        let selectedProjectId = null;
+        let isEditing = false; // Új feladat vagy meglévő szerkesztése?
+
+        // === DOM ELEMEK ===
+        const globalLoader = document.getElementById('globalLoader');
+        const errorMessage = document.getElementById('errorMessage');
+        const errorText = document.getElementById('errorText');
+        const welcomeMessage = document.getElementById('welcomeMessage');
+        const userSelect = document.getElementById('userSelect');
+        const toggleViewBtn = document.getElementById('toggleViewBtn');
+        const myTasksView = document.getElementById('myTasksView');
+        const myTasksList = document.getElementById('myTasksList');
+        const leaderView = document.getElementById('leaderView');
+        
+        // Csoportvezetői nézet elemei
+        const projectList = document.getElementById('projectList');
+        const projectDataList = document.getElementById('projectDataList');
+        const showNewTaskFormBtn = document.getElementById('showNewTaskFormBtn');
+        const projectTasksList = document.getElementById('projectTasksList');
+
+        // Felugró Űrlap (Modal) elemei
+        const taskModal = document.getElementById('taskModal');
+        const taskForm = document.getElementById('taskForm');
+        const modalTitle = document.getElementById('modalTitle');
+        const taskID = document.getElementById('taskID');
+        const taskProjekt = document.getElementById('taskProjekt');
+        const taskFeladatCim = document.getElementById('taskFeladatCim');
+        const taskFelelos = document.getElementById('taskFelelos');
+        const taskPrioritas = document.getElementById('taskPrioritas');
+        const taskBecsultOra = document.getElementById('taskBecsultOra');
+        const taskFuggoseg_ID = document.getElementById('taskFuggoseg_ID');
+        const cancelTaskBtn = document.getElementById('cancelTaskBtn');
+
+
+        // === SEGÉDFÜGGVÉNYEK ===
+
+        /**
+         * Általános Google Apps Script API hívó függvény
+         * @param {string} action - A művelet neve (pl. 'getTasks')
+         * @param {string} method - 'GET' vagy 'POST'
+         * @param {object} [data={}] - A küldendő adat (POST esetén)
+         */
+        async function callAppsScript(action, method, data = {}) {
+            globalLoader.classList.remove('hidden'); // Betöltő mutatása
+            errorMessage.classList.add('hidden'); // Régi hiba elrejtése
+
+            let url = `${API_URL}?action=${action}`;
+            let options = {
+                method: 'GET',
+                mode: 'cors',
+                redirect: 'follow', // Követi az átirányításokat, amit az Apps Script csinál
+            };
+
+            if (method === 'POST') {
+                options.method = 'POST';
+                // A POST kéréseket az Apps Script trükkösen kezeli.
+                // A 'payload'-ot egy 'requestData' objektumba kell csomagolni.
+                const requestData = { action, data };
+                options.body = JSON.stringify(requestData);
+                options.headers = {
+                    'Content-Type': 'text/plain;charset=utf-8', // Fontos! Az Apps Script ezt várja
+                };
+                // POST hívásnál az URL-nek nem kell 'action' paraméter
+                url = API_URL;
+            }
+
+            try {
+                const response = await fetch(url, options);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP hiba: ${response.status}`);
+                }
+                
+                const result = await response.json();
+                
+                if (!result.success) {
+                    throw new Error(result.message || "Ismeretlen API hiba");
+                }
+                
+                return result; // Sikeres válasz (pl. {success: true, tasks: [...]})
+            } catch (error) {
+                showError(error.message);
+                console.error("callAppsScript Hiba:", error);
+                throw error;
+            } finally {
+                globalLoader.classList.add('hidden'); // Betöltő elrejtése
+            }
+        }
+
+        /**
+         * Hibaüzenet megjelenítése a felhasználónak
+         */
+        function showError(message) {
+            errorText.textContent = `Hiba történt: ${message}. Lehet, hogy az Apps Script API URL hibás, vagy a Google Táblázat nem elérhető?`;
+            errorMessage.classList.remove('hidden');
+            globalLoader.classList.add('hidden');
+        }
+
+        /**
+         * HTML injekció elleni védelem (egyszerű)
+         */
+        function escapeHTML(str) {
+            return str ? str.toString().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;') : '';
+        }
+
+        // === ADATLEKÉRŐ ÉS FELDOLGOZÓ FÜGGVÉNYEK ===
+
+        /**
+         * 1. Összes feladat lekérése az API-tól
+         */
+        async function getAllData() {
+            welcomeMessage.textContent = "Adatok betöltése a Google Táblázatból...";
+            const result = await callAppsScript('getTasks', 'GET');
+            allTasks = result.tasks;
+            
+            // Az adatok feldolgozása a belső állapotok frissítéséhez
+            processTasks();
+            
+            welcomeMessage.textContent = `Üdv! Válassz felhasználót a kezdéshez.`;
+        }
+        
+        /**
+         * 2. A letöltött adatok feldolgozása (felhasználók, projektek kinyerése)
+         */
+        function processTasks() {
+            // Egyedi felhasználók kinyerése a 'Felelos' oszlopból
+            const users = new Set(allTasks.map(t => t[FIELDS.Felelos]).filter(Boolean));
+            siteUsers = [...users].sort((a, b) => a.localeCompare(b));
+            
+            // Egyedi projektek kinyerése a 'Projekt' oszlopból
+            const projects = new Set(allTasks.map(t => t[FIELDS.Projekt]).filter(Boolean));
+            allProjects = [...projects].sort((a, b) => a.localeCompare(b));
+
+            // Felhasználói legördülők feltöltése
+            // A fő 'userSelect'
+            userSelect.innerHTML = '<option value="">Válassz...</option>';
+            siteUsers.forEach(user => {
+                const option = document.createElement('option');
+                option.value = user;
+                option.textContent = user;
+                userSelect.appendChild(option);
+            });
+            // Az űrlap 'taskFelelos'
+            taskFelelos.innerHTML = '<option value="">Válassz felelőst...</option>';
+            siteUsers.forEach(user => {
+                const option = document.createElement('option');
+                option.value = user;
+                option.textContent = user;
+                taskFelelos.appendChild(option);
+            });
+            
+            // Projekt 'datalist' feltöltése az űrlaphoz
+            projectDataList.innerHTML = '';
+            allProjects.forEach(proj => {
+                const option = document.createElement('option');
+                option.value = proj;
+                projectDataList.appendChild(option);
+            });
+            
+            // Nézetek újrarajzolása
+            renderAllViews();
+        }
+
+        // === ADATMÓDOSÍTÓ FÜGGVÉNYEK ===
+        
+        /**
+         * Új feladat vagy meglévő frissítése
+         */
+        async function saveTask(taskData) {
+            const action = taskData[FIELDS.ID] ? 'updateTask' : 'addTask';
+            
+            try {
+                const result = await callAppsScript(action, 'POST', taskData);
+                
+                // A válaszban visszakapjuk a frissített/létrehozott sort.
+                // Frissítjük a lokális 'allTasks' tömböt ahelyett, hogy mindent újratöltenénk.
+                const updatedTask = result.data.updatedData || result.data.newRowData;
+                
+                if (action === 'addTask') {
+                    allTasks.push(updatedTask);
+                } else {
+                    // Meglévő feladat frissítése a tömbben
+                    const index = allTasks.findIndex(t => t[FIELDS.ID] == updatedTask[FIELDS.ID]);
+                    if (index > -1) {
+                        allTasks[index] = updatedTask;
+                    }
+                }
+                
+                // Újrafeldolgozzuk az adatokat (ha pl. új projekt/felhasználó jött létre)
+                processTasks();
+                
+                taskModal.classList.add('hidden');
+                taskForm.reset();
+                
+            } catch (error) {
+                showError(`Mentési hiba: ${error.message}`);
+            }
+        }
+        
+        /**
+         * Feladat mezőjének gyors-frissítése (pl. Státusz, Valós Óra)
+         */
+        async function quickUpdateTaskField(taskId, fieldName, fieldValue) {
+            const taskData = {
+                [FIELDS.ID]: taskId,
+                [fieldName]: fieldValue
+            };
+            
+             try {
+                const result = await callAppsScript('updateTask', 'POST', taskData);
+                
+                // Lokális 'allTasks' frissítése
+                const updatedTask = result.data.updatedData;
+                const index = allTasks.findIndex(t => t[FIELDS.ID] == updatedTask[FIELDS.ID]);
+                if (index > -1) {
+                    allTasks[index] = updatedTask;
+                }
+                
+                // Csak a nézeteket rajzoljuk újra, a teljes 'processTasks'-t nem kell
+                renderAllViews();
+                
+            } catch (error)
+            {
+                showError(`Gyorsfrissítési hiba: ${error.message}`);
+                // Hiba esetén töltsünk újra mindent, hogy ne legyen eltérés
+                await getAllData();
+            }
+        }
+
+
+        // === MEGJELENÍTŐ (RENDER) FÜGGVÉNYEK ===
+
+        /**
+         * Mindkét nézetet újrarajzolja a friss adatok alapján
+         */
+        function renderAllViews() {
+            if (currentView === 'myTasks') {
+                myTasksView.classList.remove('hidden');
+                leaderView.classList.add('hidden');
+                renderMyTasksView();
+            } else {
+                myTasksView.classList.add('hidden');
+                leaderView.classList.remove('hidden');
+                renderLeaderView();
+            }
+        }
+        
+        /**
+         * 1. "Saját Feladataim" nézet kirajzolása
+         */
+        function renderMyTasksView() {
+            myTasksList.innerHTML = '';
+            
+            if (!currentUser) {
+                myTasksList.innerHTML = '<p class="text-gray-500 text-center py-4">Kérlek, válassz egy felhasználót a jobb felső sarokban a feladataid megjelenítéséhez.</p>';
+                return;
+            }
+            
+            const myTasks = allTasks
+                .filter(task => task[FIELDS.Felelos] === currentUser && task[FIELDS.Statusz] !== 'Kész')
+                .sort((a, b) => (a[FIELDS.Prioritas] || 99) - (b[FIELDS.Prioritas] || 99));
+
+            if (myTasks.length === 0) {
+                myTasksList.innerHTML = `<p class="text-gray-500 text-center py-4">Nincs aktív feladatod (${escapeHTML(currentUser)}). Szép munka!</p>`;
+                return;
+            }
+
+            myTasks.forEach(task => {
+                const card = createMyTaskCard(task);
+                myTasksList.appendChild(card);
+            });
+        }
+        
+        /**
+         * 2. "Csoportvezetői Nézet" kirajzolása (Projektek)
+         */
+        function renderLeaderView() {
+            projectList.innerHTML = '';
+            
+            allProjects.forEach(projectName => {
+                const projectTasks = allTasks.filter(t => t[FIELDS.Projekt] === projectName);
+                const card = createProjectCard(projectName, projectTasks);
+                projectList.appendChild(card);
+            });
+            
+            // Ha egy projekt ki volt választva, annak a feladatait is újrarajzoljuk
+            if (selectedProjectId) {
+                renderTasksForProject(selectedProjectId);
+            } else {
+                // Ha nincs projekt kiválasztva, ürítjük a feladatlistát
+                projectTasksList.innerHTML = '<p class="text-gray-500 text-center py-4">Kattints egy projektre a feladatok megtekintéséhez.</p>';
+            }
+        }
+        
+        /**
+         * 2b. Egy adott Projekt feladatainak kirajzolása (Csoportvezetői nézetben)
+         */
+        function renderTasksForProject(projectName) {
+            selectedProjectId = projectName; // A 'selectedProjectId' mostantól a projekt neve
+            
+            projectTasksList.innerHTML = '';
+            
+            const tasksForProject = allTasks
+                .filter(t => t[FIELDS.Projekt] === projectName)
+                .sort((a, b) => (a[FIELDS.Prioritas] || 99) - (b[FIELDS.Prioritas] || 99));
+
+            if (tasksForProject.length === 0) {
+                projectTasksList.innerHTML = '<p class="text-gray-500 text-center py-4">Ehhez a projekthez még nem tartozik feladat.</p>';
+            }
+
+            tasksForProject.forEach(task => {
+                const card = createLeaderTaskCard(task);
+                projectTasksList.appendChild(card);
+            });
+        }
+
+        // === KÁRTYA KÉSZÍTŐ FÜGGVÉNYEK (HTML GENERÁLÁS) ===
+
+        /**
+         * HTML kártya generálása a "Saját Feladataim" nézethez
+         */
+        function createMyTaskCard(task) {
+            const div = document.createElement('div');
+            div.className = 'task-card bg-white p-4 rounded-lg shadow-md grid grid-cols-1 md:grid-cols-4 gap-4 items-center';
+            div.dataset.taskId = task[FIELDS.ID];
+
+            const dependency = allTasks.find(t => t[FIELDS.ID] == task[FIELDS.Fuggoseg_ID]);
+            const depText = dependency ? 
+                `<span class="font-medium text-yellow-700"> Vár erre: ${escapeHTML(dependency[FIELDS.FeladatCim])} (${dependency[FIELDS.Statusz]})</span>` : 
+                '';
+            const depBlocked = (dependency && dependency[FIELDS.Statusz] !== 'Kész');
+
+            div.innerHTML = `
+                <div class="md:col-span-2">
+                    <span class="inline-block bg-indigo-100 text-indigo-800 text-xs font-medium px-2.5 py-0.5 rounded-full mb-2">${escapeHTML(task[FIELDS.Projekt])}</span>
+                    <h3 class="text-lg font-semibold text-gray-900">${escapeHTML(task[FIELDS.FeladatCim])}</h3>
+                    <p class="text-sm text-gray-500">Prioritás: <span class="font-bold">${task[FIELDS.Prioritas] || 'N/A'}</span>${depText}</p>
+                </div>
+                
+                <div class="flex flex-col gap-2">
+                    <label class="text-sm font-medium text-gray-700">Státusz</label>
+                    <select data-field="${FIELDS.Statusz}" 
+                            class="task-update-field w-full rounded-md border-gray-300 shadow-sm sm:text-sm ${depBlocked ? 'bg-gray-200 cursor-not-allowed' : ''}"
+                            ${depBlocked ? 'disabled' : ''}>
+                        <option value="Új" ${task[FIELDS.Statusz] === 'Új' ? 'selected' : ''}>Új</option>
+                        <option value="Folyamatban" ${task[FIELDS.Statusz] === 'Folyamatban' ? 'selected' : ''}>Folyamatban</option>
+                        <option value="Kész" ${task[FIELDS.Statusz] === 'Kész' ? 'selected' : ''}>Kész</option>
+                    </select>
+                </div>
+                
+                <div class="flex flex-col gap-2">
+                    <label class="text-sm font-medium text-gray-700">Valós óraszám</label>
+                    <input type="number" data-field="${FIELDS.ValosOra}" 
+                           class="task-update-field task-blur-field w-full rounded-md border-gray-300 shadow-sm sm:text-sm" 
+                           value="${task[FIELDS.ValosOra] || 0}">
+                </div>
+            `;
+            return div;
+        }
+
+        /**
+         * HTML kártya generálása a "Projektek" listához
+         */
+        function createProjectCard(projectName, tasks) {
+            const div = document.createElement('div');
+            // A kártya 'kiválasztott' állapotának jelzése
+            const isSelected = (projectName === selectedProjectId);
+            div.className = `project-card bg-white p-5 rounded-lg shadow hover:shadow-lg transition-all cursor-pointer ${isSelected ? 'ring-2 ring-indigo-500' : ''}`;
+            div.dataset.projectName = projectName;
+            
+            const tasksTotal = tasks.length;
+            const tasksDone = tasks.filter(t => t[FIELDS.Statusz] === 'Kész').length;
+            const progress = tasksTotal > 0 ? Math.round((tasksDone / tasksTotal) * 100) : 0;
+
+            div.innerHTML = `
+                <h3 class="text-xl font-semibold text-gray-900 mb-2">${escapeHTML(projectName)}</h3>
+                <p class="text-sm text-gray-500 mb-3">${tasksTotal} feladat (${tasksDone} kész)</p>
+                <div class="w-full bg-gray-200 rounded-full h-2.5">
+                    <div class="bg-indigo-600 h-2.5 rounded-full" style="width: ${progress}%"></div>
+                </div>
+            `;
+            return div;
+        }
+        
+        /**
+         * HTML kártya generálása a "Csoportvezetői" feladatnézethez
+         */
+        function createLeaderTaskCard(task) {
+            const div = document.createElement('div');
+            div.className = 'task-card bg-white p-4 rounded-lg shadow-md flex justify-between items-center';
+            div.dataset.taskId = task[FIELDS.ID];
+
+            const dependency = allTasks.find(t => t[FIELDS.ID] == task[FIELDS.Fuggoseg_ID]);
+            
+            div.innerHTML = `
+                <div class="flex-grow">
+                    <h3 class="text-lg font-semibold text-gray-900">${escapeHTML(task[FIELDS.FeladatCim])}</h3>
+                    <p class="text-sm text-gray-500">
+                        Felelős: <span class="font-medium text-gray-700">${escapeHTML(task[FIELDS.Felelos])}</span> |
+                        Prioritás: <span class="font-medium text-gray-700">${task[FIELDS.Prioritas]}</span> |
+                        Státusz: <span class="font-medium text-gray-700">${task[FIELDS.Statusz]}</span>
+                    </p>
+                    <p class="text-sm text-gray-500">
+                        Becsült: ${task[FIELDS.BecsultOra] || 0}ó |
+                        Valós: ${task[FIELDS.ValosOra] || 0}ó |
+                        Függ: ${dependency ? escapeHTML(dependency[FIELDS.FeladatCim]) : 'N/A'}
+                    </p>
+                </div>
+                <div class="flex-shrink-0 ml-4">
+                    <button data-task-id="${task[FIELDS.ID]}" class="edit-task-btn py-1 px-3 rounded-md text-sm font-medium text-indigo-700 bg-indigo-100 hover:bg-indigo-200">
+                        Szerkesztés
+                    </button>
+                </div>
+            `;
+            return div;
+        }
+        
+        
+        // === ŰRLAP (MODAL) KEZELŐ FÜGGVÉNYEK ===
+        
+        function openTaskModal(task = null) {
+            isEditing = !!task; // Igaz, ha van 'task' objektum, hamis, ha nincs
+            taskForm.reset();
+            
+            if (isEditing) {
+                // Meglévő feladat szerkesztése
+                modalTitle.textContent = "Feladat Szerkesztése";
+                taskID.value = task[FIELDS.ID];
+                taskProjekt.value = task[FIELDS.Projekt];
+                taskFeladatCim.value = task[FIELDS.FeladatCim];
+                taskFelelos.value = task[FIELDS.Felelos];
+                taskPrioritas.value = task[FIELDS.Prioritas];
+                taskBecsultOra.value = task[FIELDS.BecsultOra];
+                
+                // Függőség választó feltöltése (a saját projekt feladataival, kivéve önmaga)
+                taskFuggoseg_ID.innerHTML = '<option value="">Nincs</option>';
+                allTasks
+                    .filter(t => t[FIELDS.Projekt] === task[FIELDS.Projekt] && t[FIELDS.ID] !== task[FIELDS.ID])
+                    .forEach(t => {
+                        const option = document.createElement('option');
+                        option.value = t[FIELDS.ID];
+                        option.textContent = `(#${t[FIELDS.ID]}) ${escapeHTML(t[FIELDS.FeladatCim])}`;
+                        taskFuggoseg_ID.appendChild(option);
+                    });
+                taskFuggoseg_ID.value = task[FIELDS.Fuggoseg_ID] || "";
+
+            } else {
+                // Új feladat létrehozása
+                modalTitle.textContent = "Új Feladat Létrehozása";
+                taskID.value = ""; // Nincs ID
+                
+                // Ha egy projekt ki van választva, töltsük ki automatikusan
+                if(selectedProjectId) {
+                    taskProjekt.value = selectedProjectId;
+                }
+                
+                // Függőség választó feltöltése (a kiválasztott projekt feladataival)
+                taskFuggoseg_ID.innerHTML = '<option value="">Nincs</option>';
+                if(selectedProjectId) {
+                     allTasks
+                        .filter(t => t[FIELDS.Projekt] === selectedProjectId)
+                        .forEach(t => {
+                            const option = document.createElement('option');
+                            option.value = t[FIELDS.ID];
+                            option.textContent = `(#${t[FIELDS.ID]}) ${escapeHTML(t[FIELDS.FeladatCim])}`;
+                            taskFuggoseg_ID.appendChild(option);
+                        });
+                }
+            }
+            
+            taskModal.classList.remove('hidden');
+        }
+        
+        function closeTaskModal() {
+            taskModal.classList.add('hidden');
+        }
+
+
+        // === ESEMÉNYKEZELŐK (EVENT LISTENERS) ===
+        
+        // Fő felhasználó-választó
+        userSelect.addEventListener('change', (e) => {
+            currentUser = e.target.value;
+            renderMyTasksView();
+        });
+
+        // Nézetváltó gomb
+        toggleViewBtn.addEventListener('click', () => {
+            currentView = (currentView === 'myTasks') ? 'leader' : 'myTasks';
+            toggleViewBtn.textContent = (currentView === 'myTasks') ? 'Váltás Csoportvezetői Nézetre' : 'Váltás a Saját Feladataimra';
+            
+            // Ha visszaváltunk a 'Saját' nézetre, ürítsük a 'selectedProjectId'-t
+            if (currentView === 'myTasks') {
+                selectedProjectId = null;
+            }
+            renderAllViews();
+        });
+        
+        // --- Csoportvezetői Nézet Eseménykezelői ---
+        
+        // Projekt kártyára kattintás
+        projectList.addEventListener('click', (e) => {
+            const card = e.target.closest('.project-card');
+            if (card) {
+                const projectName = card.dataset.projectName;
+                selectedProjectId = projectName; // Globális állapot frissítése
+                renderLeaderView(); // Újrarajzolás, ami kiemeli a kártyát
+                renderTasksForProject(projectName); // Feladatok betöltése
+            }
+        });
+
+        // "Szerkesztés" gombra kattintás a Csoportvezetői nézetben
+        projectTasksList.addEventListener('click', (e) => {
+             const editBtn = e.target.closest('.edit-task-btn');
+             if(editBtn) {
+                 const taskId = editBtn.dataset.taskId;
+                 const taskToEdit = allTasks.find(t => t[FIELDS.ID] == taskId);
+                 if(taskToEdit) {
+                     openTaskModal(taskToEdit);
+                 }
+             }
+        });
+        
+        // --- Űrlap (Modal) Eseménykezelői ---
+        
+        // "Új Feladat Létrehozása" gomb
+        showNewTaskFormBtn.addEventListener('click', () => {
+            openTaskModal(null); // 'null' jelzi, hogy új feladat
+        });
+        
+        // "Mégse" gomb az űrlapon
+        cancelTaskBtn.addEventListener('click', closeTaskModal);
+        
+        // Űrlap elküldése (Mentés)
+        taskForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const taskData = {
+                [FIELDS.ID]: taskID.value || null, // Ha van ID, akkor frissítünk
+                [FIELDS.Projekt]: taskProjekt.value.trim(),
+                [FIELDS.FeladatCim]: taskFeladatCim.value.trim(),
+                [FIELDS.Felelos]: taskFelelos.value,
+                [FIELDS.Statusz]: isEditing ? allTasks.find(t=>t[FIELDS.ID] == taskID.value)[FIELDS.Statusz] : 'Új', // Új feladat 'Új' státuszt kap
+                [FIELDS.Prioritas]: parseInt(taskPrioritas.value) || 10,
+                [FIELDS.BecsultOra]: parseFloat(taskBecsultOra.value) || 0,
+                [FIELDS.Fuggoseg_ID]: taskFuggoseg_ID.value || "",
+                [FIELDS.ValosOra]: isEditing ? allTasks.find(t=>t[FIELDS.ID] == taskID.value)[FIELDS.ValosOra] : 0 // Valós óra marad a régi
+            };
+            
+            if (!taskData[FIELDS.Projekt] || !taskData[FIELDS.FeladatCim] || !taskData[FIELDS.Felelos]) {
+                alert("A Projekt, Feladat Címe és Felelős mezők kitöltése kötelező.");
+                return;
+            }
+            
+            await saveTask(taskData);
+        });
+        
+        
+        // --- Feladat Gyors-Frissítési Eseménykezelők (Saját nézet) ---
+        
+        async function handleQuickFieldUpdate(e) {
+            const target = e.target;
+            if (!target.classList.contains('task-update-field')) return;
+
+            // A kártya 'data-task-id' attribútumának megtalálása
+            const card = target.closest('.task-card');
+            if (!card) return;
+            
+            const taskId = card.dataset.taskId;
+            const fieldName = target.dataset.field;
+            let fieldValue = target.value;
+
+            // Speciális esetek
+            if (target.type === 'number') {
+                fieldValue = parseFloat(fieldValue);
+                if (isNaN(fieldValue)) fieldValue = 0;
+            }
+            
+            target.disabled = true; // Letiltás mentés közben
+            await quickUpdateTaskField(taskId, fieldName, fieldValue);
+            target.disabled = false; // Visszaengedélyezés
+        }
+        
+        // 'change' esemény (select mezőknek)
+        myTasksList.addEventListener('change', handleQuickFieldUpdate);
+        
+        // 'blur' esemény (input mezőknek, pl. Valós Óra)
+        function blurHandler(e) {
+            if (e.target.classList.contains('task-blur-field')) {
+                handleQuickFieldUpdate(e);
+            }
+        }
+        myTasksList.addEventListener('blur', blurHandler, true);
+
+
+        // === ALKALMAZÁS INDÍTÁSA ===
+        async function main() {
+            try {
+                await getAllData();
+            } catch (error) {
+                // A hiba már megjelent a showError-ben
+                console.error("Indítási hiba:", error);
+            }
+        }
+
+        // Indítás!
+        main();
+
+    </script>
+</body>
+</html>
