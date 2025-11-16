@@ -14,7 +14,7 @@
         .task-card, .project-card { animation: fadeIn 0.3s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         /* A "select" mezők egységesítése */
-        select {
+        select:not([multiple]) {
             background-image: url('data:image/svg+xml;charset=utf-8,<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 20"><path stroke="%236B7280" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6 8l4 4 4-4"/></svg>');
             background-position: right 0.5rem center;
             background-repeat: no-repeat;
@@ -22,6 +22,61 @@
             -webkit-appearance: none;
             -moz-appearance: none;
             appearance: none;
+        }
+        /* Heti Terv Stílusok */
+        .week-grid {
+            display: grid;
+            grid-template-columns: 150px 1fr;
+            border-left: 1px solid #e5e7eb;
+            border-top: 1px solid #e5e7eb;
+        }
+        .week-header {
+            display: grid;
+            grid-template-columns: 150px 1fr;
+        }
+        .day-lane {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .day-cell {
+            border-right: 1px solid #e5e7eb;
+            min-height: 80px;
+            padding: 4px;
+            position: relative; /* A feladat-blokkok pozicionálásához */
+        }
+        .user-label {
+            font-weight: 600;
+            padding: 1rem;
+            text-align: right;
+            border-right: 1px solid #e5e7eb;
+            border-bottom: 1px solid #e5e7eb;
+            background-color: #f9fafb;
+        }
+        .task-block {
+            background-color: #4f46e5; /* indigo-600 */
+            color: white;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            line-height: 1.2;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            position: absolute;
+            height: calc(100% - 8px); /* 4px padding top/bottom */
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .fix-event-block {
+            background-color: #6b7280; /* gray-500 */
+            opacity: 0.7;
+            position: absolute;
+            height: calc(100% - 8px);
+            padding: 2px 6px;
+            color: white;
+            font-size: 0.75rem;
+            border-radius: 4px;
+            overflow: hidden;
         }
     </style>
     <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
@@ -38,23 +93,24 @@
                 <h1 class="text-3xl font-bold text-gray-900">Planner</h1>
                 <p id="welcomeMessage" class="text-gray-600">Betöltés...</p>
             </div>
-            <div class="flex items-center space-x-4">
+            <div class="flex items-center space-x-2">
                 <!-- FELHASZNÁLÓVÁLASZTÓ -->
                 <div>
                     <label for="userSelect" class="text-sm font-medium text-gray-700">Ki vagy te?</label>
                     <select id="userSelect" class="ml-2 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                         <option value="">Válassz...</option>
-                        <!-- A nevek a Google Sheet 'Felelos' oszlopa alapján töltődnek be -->
                     </select>
                 </div>
+                <!-- NÉZETVÁLTÓ GOMBOK -->
+                <button id="myTasksViewBtn" class="py-2 px-4 rounded-md font-medium text-white bg-indigo-600 shadow-sm">Saját Nézet</button>
                 <!-- 3. MÓDOSÍTÁS: Gomb szövege -->
-                <button id="toggleViewBtn" class="py-2 px-4 rounded-md font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                    Váltás Tervezői Nézetre
-                </button>
+                <button id="leaderViewBtn" class="py-2 px-4 rounded-md font-medium text-indigo-700 bg-indigo-100 hover:bg-indigo-200">Tervezői Nézet</button>
+                <!-- 13. MÓDOSÍTÁS: Új Heti Terv Gomb -->
+                <button id="weeklyPlanViewBtn" class="py-2 px-4 rounded-md font-medium text-indigo-700 bg-indigo-100 hover:bg-indigo-200">Heti Terv</button>
             </div>
         </header>
 
-        <!-- BETÖLTÉS JELZŐ (Mostantól van egy globális, teljes oldalas is) -->
+        <!-- BETÖLTÉS JELZŐ -->
         <div id="globalLoader" class="hidden fixed inset-0 bg-white bg-opacity-75 flex items-center justify-center z-50">
             <div class="text-center">
                 <svg class="animate-spin h-8 w-8 text-indigo-600 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -85,90 +141,174 @@
             NÉZET 2: "TERVEZŐI NÉZET"
         -->
         <main id="leaderView" class="hidden">
-            
-            <!-- Projekt Lista és Új Projekt Gomb -->
             <div class="flex justify-between items-center mb-4">
                 <h2 class="text-2xl font-semibold text-gray-800">Projektek</h2>
-                <button id="showNewTaskFormBtn" class="py-2 px-4 text-sm rounded-md font-medium text-white bg-blue-600 hover:bg-blue-700">+ Új Feladat Létrehozása</button>
-            </div>
-
-            <!-- Projekt kártyák helye -->
-            <div id="projectList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-                <!-- A Projekt kártyák ide kerülnek JavaScript segítségével -->
-            </div>
-
-            <!-- Új Feladat Űrlap (rejtett, mostantól felugró ablak lesz) -->
-            <div id="taskModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-30">
-                <div class="relative top-20 mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-md bg-white">
-                    <form id="taskForm">
-                        <h3 id="modalTitle" class="text-lg font-medium mb-4">Új Feladat Létrehozása</h3>
-                        <input type="hidden" id="taskID" />
-                        
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div class="md:col-span-2">
-                                <label for="taskProjekt" class="block text-sm font-medium text-gray-700">Projekt*</label>
-                                <!-- Itt egy sima beviteli mező lesz, amit a kód 'autocomplete'-tel segít -->
-                                <input type="text" id="taskProjekt" required list="projectDataList" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                                <datalist id="projectDataList"></datalist>
-                                <p class="text-xs text-gray-500 mt-1">Gépelj a szűréshez, vagy írj be új projektnevet.</p>
-                            </div>
-
-                            <div class="md:col-span-2">
-                                <label for="taskFeladatCim" class="block text-sm font-medium text-gray-700">Feladat Címe*</label>
-                                <input type="text" id="taskFeladatCim" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                            </div>
-                            
-                            <div>
-                                <label for="taskFelelos" class="block text-sm font-medium text-gray-700">Felelős*</label>
-                                <select id="taskFelelos" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                                    <!-- A felhasználók ide kerülnek JavaScript segítségével -->
-                                </select>
-                            </div>
-                            
-                            <!-- 6. MÓDOSÍTÁS: Határidő naptár hozzáadása -->
-                            <div>
-                                <label for="taskHatarido" class="block text-sm font-medium text-gray-700">Határidő</label>
-                                <input type="date" id="taskHatarido" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                            </div>
-
-                            <div>
-                                <label for="taskBecsultOra" class="block text-sm font-medium text-gray-700">Becsült Óraszám</label>
-                                <!-- 10. MÓDOSÍTÁS: Tizedesjegyek engedélyezése -->
-                                <input type="number" id="taskBecsultOra" value="0" step="0.1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                            </div>
-
-                            <div>
-                                <label for="taskFuggoseg_ID" class="block text-sm font-medium text-gray-700">Függőség (Opcionális)</label>
-                                <select id="taskFuggoseg_ID" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                                    <option value="">Nincs</option>
-                                    <!-- 7. MÓDOSÍTÁS: A feladatok ide 'Feladat (Projekt)' formátumban kerülnek -->
-                                </select>
-                            </div>
-
-                            <!-- 9. MÓDOSÍTÁS: Prioritás mező elrejtve a felületről -->
-
-                        </div>
-                        
-                        <div class="flex justify-end gap-2 pt-6">
-                            <button type="button" id="cancelTaskBtn" class="py-2 px-4 rounded-md font-medium text-gray-700 bg-gray-100 hover:bg-gray-200">Mégse</button>
-                            <button type="submit" class="py-2 px-4 rounded-md font-medium text-white bg-blue-600 hover:bg-blue-700">Mentés</button>
-                        </div>
-                    </form>
+                <div class="flex space-x-2">
+                    <!-- 15. MÓDOSÍTÁS: Új Gomb -->
+                    <button id="showFixEventViewBtn" class="py-2 px-4 text-sm rounded-md font-medium text-white bg-gray-600 hover:bg-gray-700">Fix Események Kezelése</button>
+                    <button id="showNewTaskFormBtn" class="py-2 px-4 text-sm rounded-md font-medium text-white bg-blue-600 hover:bg-blue-700">+ Új Feladat Létrehozása</button>
                 </div>
             </div>
-
-            <!-- A kiválasztott projekt feladatainak listája -->
-            <!-- 5. MÓDOSÍTÁS: A lista tartalma mostantól felelősök szerint csoportosítva jelenik meg -->
+            <div id="projectList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+            </div>
             <div id="projectTasksList" class="space-y-6">
-                <!-- A Csoportvezetői nézet feladat kártyái ide kerülnek -->
             </div>
         </main>
+
+        <!-- 
+            NÉZET 3: "HETI TERV NÉZET" (ÚJ V2.0)
+        -->
+        <main id="weeklyPlanView" class="hidden">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-2xl font-semibold text-gray-800">Heti Terheltségi Térkép</h2>
+            </div>
+            <div class="bg-white rounded-lg shadow overflow-hidden">
+                <!-- Heti Terv Fejléc -->
+                <div class="week-header">
+                    <div class="user-label"></div> <!-- Üres sarok -->
+                    <div class="day-lane">
+                        <div class="day-cell font-semibold p-3 text-center">HÉTFŐ</div>
+                        <div class="day-cell font-semibold p-3 text-center">KEDD</div>
+                        <div class="day-cell font-semibold p-3 text-center">SZERDA</div>
+                        <div class="day-cell font-semibold p-3 text-center">CSÜTÖRTÖK</div>
+                        <div class="day-cell font-semibold p-3 text-center">PÉNTEK</div>
+                    </div>
+                </div>
+                <!-- Heti Terv Rács (Swimlanes) -->
+                <div id="weeklyPlanGrid" class="week-grid">
+                    <!-- A Felhasználói sávok ide kerülnek JavaScript segítségével -->
+                </div>
+            </div>
+        </main>
+
+        <!-- 
+            NÉZET 4: "FIX ESEMÉNYEK KEZELÉSE" (ÚJ V2.0)
+        -->
+        <main id="fixEventView" class="hidden">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-2xl font-semibold text-gray-800">Fix Események Kezelése</h2>
+                <button id="showNewFixEventFormBtn" class="py-2 px-4 text-sm rounded-md font-medium text-white bg-green-600 hover:bg-green-700">+ Új Fix Esemény</button>
+            </div>
+            
+            <!-- Fix Események Táblázata -->
+            <div class="bg-white rounded-lg shadow overflow-hidden">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Esemény Neve</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Felelős</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nap</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hossz (óra)</th>
+                            <th scope="col" class="relative px-6 py-3"><span class="sr-only">Műveletek</span></th>
+                        </tr>
+                    </thead>
+                    <tbody id="fixEventTableBody" class="bg-white divide-y divide-gray-200">
+                        <!-- Fix esemény sorok ide kerülnek -->
+                    </tbody>
+                </table>
+            </div>
+        </main>
+
+
+        <!-- FELUGRO ABLAK: Feladat Szerkesztése/Létrehozása -->
+        <div id="taskModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-30">
+            <div class="relative top-20 mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-md bg-white">
+                <form id="taskForm">
+                    <h3 id="modalTitle" class="text-lg font-medium mb-4">Új Feladat Létrehozása</h3>
+                    <input type="hidden" id="taskID" />
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="md:col-span-2">
+                            <label for="taskProjekt" class="block text-sm font-medium text-gray-700">Projekt*</label>
+                            <input type="text" id="taskProjekt" required list="projectDataList" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                            <datalist id="projectDataList"></datalist>
+                            <p class="text-xs text-gray-500 mt-1">Gépelj a szűréshez, vagy írj be új projektnevet.</p>
+                        </div>
+
+                        <div class="md:col-span-2">
+                            <label for="taskFeladatCim" class="block text-sm font-medium text-gray-700">Feladat Címe*</label>
+                            <input type="text" id="taskFeladatCim" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                        </div>
+                        
+                        <div>
+                            <label for="taskFelelos" class="block text-sm font-medium text-gray-700">Felelős*</label>
+                            <select id="taskFelelos" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                            </select>
+                        </div>
+                        
+                        <!-- 6. MÓDOSÍTÁS: Határidő naptár hozzáadása -->
+                        <div>
+                            <label for="taskHatarido" class="block text-sm font-medium text-gray-700">Határidő</label>
+                            <input type="date" id="taskHatarido" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                        </div>
+
+                        <div>
+                            <label for="taskBecsultOra" class="block text-sm font-medium text-gray-700">Becsült Óraszám</label>
+                            <!-- 10. MÓDOSÍTÁS: Tizedesjegyek engedélyezése -->
+                            <input type="number" id="taskBecsultOra" value="0" step="0.1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                        </div>
+
+                        <div>
+                            <label for="taskFuggoseg_ID" class="block text-sm font-medium text-gray-700">Függőség (Opcionális)</label>
+                            <select id="taskFuggoseg_ID" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                <option value="">Nincs</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="flex justify-end gap-2 pt-6">
+                        <button type="button" id="cancelTaskBtn" class="py-2 px-4 rounded-md font-medium text-gray-700 bg-gray-100 hover:bg-gray-200">Mégse</button>
+                        <button type="submit" class="py-2 px-4 rounded-md font-medium text-white bg-blue-600 hover:bg-blue-700">Mentés</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- FELUGRO ABLAK: Fix Esemény Szerkesztése/Létrehozása (ÚJ V2.0) -->
+        <div id="fixEventModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-40">
+             <div class="relative top-20 mx-auto p-5 border w-full max-w-lg shadow-lg rounded-md bg-white">
+                <form id="fixEventForm">
+                    <h3 id="fixEventModalTitle" class="text-lg font-medium mb-4">Új Fix Esemény</h3>
+                    <input type="hidden" id="fixEventID" />
+                    <div class="space-y-4">
+                        <div>
+                            <label for="fixEventEsemenyNeve" class="block text-sm font-medium text-gray-700">Esemény Neve*</label>
+                            <input type="text" id="fixEventEsemenyNeve" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                        </div>
+                        <div>
+                            <label for="fixEventFelelos" class="block text-sm font-medium text-gray-700">Felelős*</label>
+                            <select id="fixEventFelelos" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                <!-- Felhasználók ide töltődnek -->
+                            </select>
+                        </div>
+                        <div>
+                            <label for="fixEventNap" class="block text-sm font-medium text-gray-700">Nap*</label>
+                            <select id="fixEventNap" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                <option value="Hétfő">Hétfő</Ganttoption>
+                                <option value="Kedd">Kedd</option>
+                                <option value="Szerda">Szerda</option>
+                                <option value="Csütörtök">Csütörtök</option>
+                                <option value="Péntek">Péntek</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="fixEventHosszOra" class="block text-sm font-medium text-gray-700">Hossz (óra)*</label>
+                            <input type="number" id="fixEventHosszOra" step="0.1" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                        </div>
+                    </div>
+                    <div class="flex justify-end gap-2 pt-6">
+                        <button type="button" id="cancelFixEventBtn" class="py-2 px-4 rounded-md font-medium text-gray-700 bg-gray-100 hover:bg-gray-200">Mégse</button>
+                        <button type="submit" class="py-2 px-4 rounded-md font-medium text-white bg-green-600 hover:bg-green-700">Esemény Mentése</button>
+                    </div>
+                </form>
+            </div>
+        </div>
 
     </div>
 
     <!-- 2. MÓDOSÍTÁS: Lábléc és verziószám -->
     <footer class="text-center py-4 mt-8">
-        <p class="text-sm text-gray-400">v1.2</p>
+        <p class="text-sm text-gray-400">v2.0</p>
     </footer>
 
     <!-- 
@@ -179,13 +319,11 @@
     <script type="module">
         
         // ===================================================================
-        // === 1. KONFIGURÁCIÓ: EZ MÁR BE VAN ÁLLÍTVA! ===
+        // === KONFIGURÁCIÓ ===
         // ===================================================================
-        
-        const API_URL = "https://script.google.com/macros/s/AKfycbwHNyf6fZcjO-4DMW48drPVilfzAsTsLo9ujPd36qOyIZSykZtEz8gfpcSwu3ix3cy2/exec";
+        const API_URL = "https://script.google.com/macros/s/AKfycbyozcR-dSPaYmZLL-PwwpW90YDoA5MTP3QGoeBlX5QIOcE6ho27UehBfVilmM3lBQAZ/exec";
         
         // A Google Sheet oszlopnevei (ahogy az útmutatóban létrehoztuk)
-        // 6. MÓDOSÍTÁS: Hozzáadva a 'Hatarido' mező
         const FIELDS = {
             ID: "ID",
             Projekt: "Projekt",
@@ -196,12 +334,20 @@
             Fuggoseg_ID: "Fuggoseg_ID",
             BecsultOra: "BecsultOra",
             ValosOra: "ValosOra",
-            Hatarido: "Hatarido" // 6. MÓDOSÍTÁS
+            Hatarido: "Hatarido"
         };
+        
+        const FIX_EVENT_FIELDS = {
+            ID: "ID",
+            EsemenyNeve: "EsemenyNeve",
+            Felelos: "Felelos",
+            Nap: "Nap",
+            HosszOra: "HosszOra"
+        };
+        
+        const WORK_HOURS_PER_DAY = 8;
+        const WEEK_DAYS = ["Hétfő", "Kedd", "Szerda", "Csütörtök", "Péntek"];
         // ===================================================================
-        // === VÉGE: KONFIGURÁCIÓ ===
-        // ===================================================================
-
 
         // === ÁLLAPOT VÁLTOZÓK ===
         let currentView = 'myTasks';
@@ -209,8 +355,10 @@
         let siteUsers = [];
         let allProjects = [];
         let allTasks = [];
-        let selectedProjectName = null; // A Tervezői nézetben kiválasztott projekt neve
+        let allFixEvents = []; // ÚJ V2.0
+        let selectedProjectName = null;
         let isEditing = false;
+        let isFixEventEditing = false;
 
         // === DOM ELEMEK ===
         const globalLoader = document.getElementById('globalLoader');
@@ -218,18 +366,34 @@
         const errorText = document.getElementById('errorText');
         const welcomeMessage = document.getElementById('welcomeMessage');
         const userSelect = document.getElementById('userSelect');
-        const toggleViewBtn = document.getElementById('toggleViewBtn');
+        
+        // Nézetváltó gombok
+        const myTasksViewBtn = document.getElementById('myTasksViewBtn');
+        const leaderViewBtn = document.getElementById('leaderViewBtn');
+        const weeklyPlanViewBtn = document.getElementById('weeklyPlanViewBtn');
+        
+        // Fő nézetek
         const myTasksView = document.getElementById('myTasksView');
         const myTasksList = document.getElementById('myTasksList');
         const leaderView = document.getElementById('leaderView');
+        const weeklyPlanView = document.getElementById('weeklyPlanView');
+        const fixEventView = document.getElementById('fixEventView');
         
-        // Csoportvezetői nézet elemei
+        // Tervezői nézet elemei
         const projectList = document.getElementById('projectList');
         const projectDataList = document.getElementById('projectDataList');
         const showNewTaskFormBtn = document.getElementById('showNewTaskFormBtn');
+        const showFixEventViewBtn = document.getElementById('showFixEventViewBtn');
         const projectTasksList = document.getElementById('projectTasksList');
 
-        // Felugró Űrlap (Modal) elemei
+        // Heti Terv nézet elemei
+        const weeklyPlanGrid = document.getElementById('weeklyPlanGrid');
+        
+        // Fix Esemény nézet elemei
+        const fixEventTableBody = document.getElementById('fixEventTableBody');
+        const showNewFixEventFormBtn = document.getElementById('showNewFixEventFormBtn');
+        
+        // Feladat Modal elemei
         const taskModal = document.getElementById('taskModal');
         const taskForm = document.getElementById('taskForm');
         const modalTitle = document.getElementById('modalTitle');
@@ -237,11 +401,21 @@
         const taskProjekt = document.getElementById('taskProjekt');
         const taskFeladatCim = document.getElementById('taskFeladatCim');
         const taskFelelos = document.getElementById('taskFelelos');
-        const taskHatarido = document.getElementById('taskHatarido'); // 6. MÓDOSÍTÁS
+        const taskHatarido = document.getElementById('taskHatarido');
         const taskBecsultOra = document.getElementById('taskBecsultOra');
         const taskFuggoseg_ID = document.getElementById('taskFuggoseg_ID');
         const cancelTaskBtn = document.getElementById('cancelTaskBtn');
-
+        
+        // Fix Esemény Modal elemei
+        const fixEventModal = document.getElementById('fixEventModal');
+        const fixEventForm = document.getElementById('fixEventForm');
+        const fixEventModalTitle = document.getElementById('fixEventModalTitle');
+        const fixEventID = document.getElementById('fixEventID');
+        const fixEventEsemenyNeve = document.getElementById('fixEventEsemenyNeve');
+        const fixEventFelelos = document.getElementById('fixEventFelelos');
+        const fixEventNap = document.getElementById('fixEventNap');
+        const fixEventHosszOra = document.getElementById('fixEventHosszOra');
+        const cancelFixEventBtn = document.getElementById('cancelFixEventBtn');
 
         // === SEGÉDFÜGGVÉNYEK ===
 
@@ -267,10 +441,14 @@
             }
 
             try {
+                // Siker esetén a fetch 1-2 másodpercig tart, ami nem elég a loader megjelenítéséhez.
+                // Hosszabb POST hívásoknál (pl. mentés) láthatóbb lesz.
                 const response = await fetch(url, options);
                 
                 if (!response.ok) {
-                    throw new Error(`HTTP hiba: ${response.status}`);
+                    const errorBody = await response.text();
+                    console.error("Nem OK válasz:", errorBody);
+                    throw new Error(`HTTP hiba: ${response.status}. Válasz: ${errorBody}`);
                 }
                 
                 const result = await response.json();
@@ -299,7 +477,7 @@
             return str ? str.toString().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;') : '';
         }
 
-        // 10. MÓDOSÍTÁS: Segédfüggvény a tizedesjegyek kezelésére (vesszőt pontra cserél)
+        // 10. MÓDOSÍTÁS
         function parseDecimal(value) {
             if (typeof value === 'string') {
                 value = value.replace(',', '.');
@@ -308,13 +486,65 @@
             return isNaN(parsed) ? 0 : parsed;
         }
 
-        // 6. MÓDOSÍTÁS: Segédfüggvény a dátumok szép formázásához
+        // 6. MÓDOSÍTÁS
         function formatDate(dateString) {
             if (!dateString) return 'N/A';
             try {
-                return new Date(dateString).toLocaleDateString('hu-HU', { year: 'numeric', month: '2-digit', day: '2-digit' });
+                // A Google Sheets néha '2025. 11. 20.' formátumban adja vissza, máskor ISO.
+                // Biztosra megyünk.
+                if (typeof dateString === 'string' && dateString.includes('.')) {
+                     // Manuális átalakítás 'YYYY-MM-DD' formátumra
+                    const parts = dateString.split('.').map(p => p.trim());
+                    dateString = `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+                }
+                const date = new Date(dateString);
+                if (isNaN(date.getTime())) return 'Érvénytelen dátum';
+                
+                return date.toLocaleDateString('hu-HU', { year: 'numeric', month: '2-digit', day: '2-digit' });
             } catch (e) {
                 return 'Érvénytelen dátum';
+            }
+        }
+        
+        // === NÉZETVÁLTÓ LOGIKA (ÚJ V2.0) ===
+        
+        function switchView(viewName) {
+            currentView = viewName;
+            
+            // Összes nézet elrejtése
+            myTasksView.classList.add('hidden');
+            leaderView.classList.add('hidden');
+            weeklyPlanView.classList.add('hidden');
+            fixEventView.classList.add('hidden');
+            
+            // Összes gomb stílusának resetelése
+            myTasksViewBtn.className = "py-2 px-4 rounded-md font-medium text-indigo-700 bg-indigo-100 hover:bg-indigo-200";
+            leaderViewBtn.className = "py-2 px-4 rounded-md font-medium text-indigo-700 bg-indigo-100 hover:bg-indigo-200";
+            weeklyPlanViewBtn.className = "py-2 px-4 rounded-md font-medium text-indigo-700 bg-indigo-100 hover:bg-indigo-200";
+
+            // Aktív nézet és gomb beállítása
+            switch (viewName) {
+                case 'myTasks':
+                    myTasksView.classList.remove('hidden');
+                    myTasksViewBtn.className = "py-2 px-4 rounded-md font-medium text-white bg-indigo-600 shadow-sm";
+                    renderMyTasksView();
+                    break;
+                case 'leader':
+                    leaderView.classList.remove('hidden');
+                    leaderViewBtn.className = "py-2 px-4 rounded-md font-medium text-white bg-indigo-600 shadow-sm";
+                    renderLeaderView();
+                    break;
+                case 'weeklyPlan':
+                    weeklyPlanView.classList.remove('hidden');
+                    weeklyPlanViewBtn.className = "py-2 px-4 rounded-md font-medium text-white bg-indigo-600 shadow-sm";
+                    renderWeeklyPlanView();
+                    break;
+                case 'fixEvent':
+                    fixEventView.classList.remove('hidden');
+                    // Nincs dedikált gombja, a "Tervezői" nézet gombja marad aktív
+                    leaderViewBtn.className = "py-2 px-4 rounded-md font-medium text-white bg-indigo-600 shadow-sm";
+                    renderFixEventView();
+                    break;
             }
         }
 
@@ -323,8 +553,10 @@
 
         async function getAllData() {
             welcomeMessage.textContent = "Adatok betöltése a Google Táblázatból...";
-            const result = await callAppsScript('getTasks', 'GET');
+            // FRISSÍTÉS V2.0: Az 'getAllData' egy hívással kér le mindent
+            const result = await callAppsScript('getAllData', 'GET');
             allTasks = result.tasks;
+            allFixEvents = result.fixEvents;
             
             processTasks();
             
@@ -333,28 +565,22 @@
         
         function processTasks() {
             // Egyedi felhasználók kinyerése
-            const users = new Set(allTasks.map(t => t[FIELDS.Felelos]).filter(Boolean));
+            const usersFromTasks = allTasks.map(t => t[FIELDS.Felelos]);
+            const usersFromEvents = allFixEvents.map(e => e[FIX_EVENT_FIELDS.Felelos]);
+            const users = new Set([...usersFromTasks, ...usersFromEvents].filter(Boolean));
+            
             siteUsers = [...users].sort((a, b) => a.localeCompare(b));
             
-            // Egyedi projektek kinyerése
             const projects = new Set(allTasks.map(t => t[FIELDS.Projekt]).filter(Boolean));
             allProjects = [...projects].sort((a, b) => a.localeCompare(b));
 
-            // Felhasználói legördülők feltöltése
-            userSelect.innerHTML = '<option value="">Válassz...</option>';
-            siteUsers.forEach(user => {
-                const option = document.createElement('option');
-                option.value = user;
-                option.textContent = user;
-                userSelect.appendChild(option);
-            });
-            taskFelelos.innerHTML = '<option value="">Válassz felelőst...</option>';
-            siteUsers.forEach(user => {
-                const option = document.createElement('option');
-                option.value = user;
-                option.textContent = user;
-                taskFelelos.appendChild(option);
-            });
+            // Felhasználói legördülők feltöltése (mind a 3 helyen)
+            const userOptionsHTML = '<option value="">Válassz...</option>' + 
+                siteUsers.map(user => `<option value="${escapeHTML(user)}">${escapeHTML(user)}</option>`).join('');
+            
+            userSelect.innerHTML = userOptionsHTML;
+            taskFelelos.innerHTML = userOptionsHTML;
+            fixEventFelelos.innerHTML = userOptionsHTML;
             
             // Projekt 'datalist' feltöltése
             projectDataList.innerHTML = '';
@@ -364,8 +590,8 @@
                 projectDataList.appendChild(option);
             });
             
-            // Nézetek újrarajzolása
-            renderAllViews();
+            // Aktuális nézet újrarajzolása
+            switchView(currentView);
         }
 
         // === ADATMÓDOSÍTÓ FÜGGVÉNYEK ===
@@ -375,16 +601,13 @@
             
             try {
                 const result = await callAppsScript(action, 'POST', taskData);
-                
                 const updatedTask = result.data.updatedData || result.data.newRowData;
                 
                 if (action === 'addTask') {
                     allTasks.push(updatedTask);
                 } else {
                     const index = allTasks.findIndex(t => t[FIELDS.ID] == updatedTask[FIELDS.ID]);
-                    if (index > -1) {
-                        allTasks[index] = updatedTask;
-                    }
+                    if (index > -1) allTasks[index] = updatedTask;
                 }
                 
                 processTasks();
@@ -398,19 +621,18 @@
         }
         
         async function quickUpdateTaskField(taskId, fieldName, fieldValue) {
-            const taskData = {
-                [FIELDS.ID]: taskId,
-                [fieldName]: fieldValue
-            };
+            // A gyorsfrissítésnek ismernie kell a teljes objektumot, mert az Apps Script
+            // updateTask funkciója a 'data'-ból veszi a régieket, ha nincs új.
+            // Egyszerűbb, ha elküldjük a teljes frissített objektumot.
+            const originalTask = allTasks.find(t => t[FIELDS.ID] == taskId);
+            const taskData = { ...originalTask, [fieldName]: fieldValue };
             
              try {
                 const result = await callAppsScript('updateTask', 'POST', taskData);
                 
                 const updatedTask = result.data.updatedData;
                 const index = allTasks.findIndex(t => t[FIELDS.ID] == updatedTask[FIELDS.ID]);
-                if (index > -1) {
-                    allTasks[index] = updatedTask;
-                }
+                if (index > -1) allTasks[index] = updatedTask;
                 
                 renderAllViews();
                 
@@ -420,20 +642,55 @@
                 await getAllData();
             }
         }
+        
+        // === FIX ESEMÉNY MŰVELETEK (ÚJ V2.0) ===
+        
+        async function saveFixEvent(eventData) {
+            const action = eventData[FIX_EVENT_FIELDS.ID] ? 'updateFixEvent' : 'addFixEvent';
+            try {
+                const result = await callAppsScript(action, 'POST', eventData);
+                const updatedEvent = result.data.updatedData || result.data.newRowData;
+
+                if (action === 'addFixEvent') {
+                    allFixEvents.push(updatedEvent);
+                } else {
+                    const index = allFixEvents.findIndex(e => e[FIX_EVENT_FIELDS.ID] == updatedEvent[FIX_EVENT_FIELDS.ID]);
+                    if (index > -1) allFixEvents[index] = updatedEvent;
+                }
+                
+                processTasks(); // Frissítjük a felhasználói listákat
+                renderFixEventView(); // Újrarajzoljuk az eseménytáblát
+                
+                fixEventModal.classList.add('hidden');
+                fixEventForm.reset();
+
+            } catch (error) {
+                 showError(`Fix esemény mentési hiba: ${error.message}`);
+            }
+        }
+        
+        async function deleteFixEvent(eventId) {
+            if (!confirm("Biztosan törölni szeretnéd ezt a fix eseményt?")) return;
+            
+            try {
+                await callAppsScript('deleteFixEvent', 'POST', { id: eventId });
+                
+                allFixEvents = allFixEvents.filter(e => e[FIX_EVENT_FIELDS.ID] != eventId);
+                
+                processTasks();
+                renderFixEventView();
+
+            } catch (error) {
+                 showError(`Fix esemény törlési hiba: ${error.message}`);
+            }
+        }
 
 
         // === MEGJELENÍTŐ (RENDER) FÜGGVÉNYEK ===
 
         function renderAllViews() {
-            if (currentView === 'myTasks') {
-                myTasksView.classList.remove('hidden');
-                leaderView.classList.add('hidden');
-                renderMyTasksView();
-            } else {
-                myTasksView.classList.add('hidden');
-                leaderView.classList.remove('hidden');
-                renderLeaderView();
-            }
+            // A switchView kezeli a megfelelő render-függvény hívását
+            switchView(currentView);
         }
         
         /**
@@ -451,7 +708,6 @@
             const myTasks = allTasks
                 .filter(task => task[FIELDS.Felelos] === currentUser && task[FIELDS.Statusz] !== 'Kész')
                 .sort((a, b) => {
-                    // Adatok előkészítése a rendezéshez
                     const prioA = a[FIELDS.Prioritas] || 99;
                     const prioB = b[FIELDS.Prioritas] || 99;
                     const hoursA = parseDecimal(a[FIELDS.BecsultOra] || 0);
@@ -459,21 +715,18 @@
                     const dateA = a[FIELDS.Hatarido] ? new Date(a[FIELDS.Hatarido]) : null;
                     const dateB = b[FIELDS.Hatarido] ? new Date(b[FIELDS.Hatarido]) : null;
 
-                    // 1. Rendezés Határidő szerint (a határidő nélküliek a végére)
-                    if (dateA && !dateB) return -1; // A-nak van dátuma, B-nek nincs -> A előre
-                    if (!dateA && dateB) return 1;  // B-nek van dátuma, A-nak nincs -> B előre
+                    if (dateA && !dateB) return -1;
+                    if (!dateA && dateB) return 1;
                     if (dateA && dateB) {
                         if (dateA.getTime() !== dateB.getTime()) {
-                            return dateA.getTime() - dateB.getTime(); // Dátumok összehasonlítása
+                            return dateA.getTime() - dateB.getTime();
                         }
                     }
                     
-                    // 2. Rendezés Prioritás szerint (ha a dátumok egyeznek vagy nincsenek)
                     if (prioA !== prioB) {
                         return prioA - prioB;
                     }
 
-                    // 3. Rendezés Becsült óraszám szerint (ha a prioritás is egyezik)
                     return hoursA - hoursB;
                 });
 
@@ -500,7 +753,6 @@
                 projectList.appendChild(card);
             });
             
-            // A projekt feladatainak frissítése (ha van kiválasztva)
             if (selectedProjectName) {
                 renderTasksForProject(selectedProjectName);
             } else {
@@ -509,10 +761,10 @@
         }
         
         /**
-         * 2b. Egy adott Projekt feladatainak kirajzolása (Csoportvezetői nézetben)
+         * 2b. Egy adott Projekt feladatainak kirajzolása (Tervezői nézetben)
          */
         function renderTasksForProject(projectName) {
-            selectedProjectName = projectName; // Globális állapot frissítése
+            selectedProjectName = projectName;
             projectTasksList.innerHTML = '';
             
             const tasksForProject = allTasks.filter(t => t[FIELDS.Projekt] === projectName);
@@ -523,18 +775,15 @@
             }
 
             // 5. MÓDOSÍTÁS: Csoportosítás felelősök szerint
-            // Először kigyűjtjük a projektben részt vevő felelősöket
             const usersInProject = [...new Set(tasksForProject.map(t => t[FIELDS.Felelos]))].sort();
             
             usersInProject.forEach(user => {
-                // Létrehozunk egy szekciót a felhasználónak
                 const userSection = document.createElement('div');
                 userSection.innerHTML = `<h3 class="text-xl font-semibold text-gray-800 mt-6 mb-2 pb-2 border-b">${escapeHTML(user) || 'Nincs felelős'} feladatai</h3>`;
                 
-                // Kiszűrjük és rendezzük az adott felhasználó feladatait
                 const tasksForUser = tasksForProject
                     .filter(t => t[FIELDS.Felelos] === user)
-                    .sort((a, b) => (a[FIELDS.Prioritas] || 99) - (b[FIELDS.Prioritas] || 99)); // Csoporton belül prioritás szerint
+                    .sort((a, b) => (a[FIELDS.Prioritas] || 99) - (b[FIELDS.Prioritas] || 99));
                 
                 tasksForUser.forEach(task => {
                     const card = createLeaderTaskCard(task);
@@ -544,12 +793,141 @@
                 projectTasksList.appendChild(userSection);
             });
         }
+        
+        /**
+         * 3. "Heti Terv" nézet kirajzolása (ÚJ V2.0)
+         */
+        function renderWeeklyPlanView() {
+            weeklyPlanGrid.innerHTML = ''; // Rács ürítése
+            
+            siteUsers.forEach(user => {
+                // 1. Felhasználói sáv ("úszósáv") létrehozása
+                const userLabel = document.createElement('div');
+                userLabel.className = 'user-label';
+                userLabel.textContent = user;
+                weeklyPlanGrid.appendChild(userLabel);
+                
+                const dayLane = document.createElement('div');
+                dayLane.className = 'day-lane';
+                
+                let hourCounter = 0; // Óraszámláló a hétre
+                
+                // 2. Fix események (meetingek) beolvasása ehhez a felhasználóhoz
+                const userFixEvents = allFixEvents.filter(e => e[FIX_EVENT_FIELDS.Felelos] === user);
+                
+                // 3. Felhasználó feladatainak lekérése és rendezése (pont, mint a "Saját Nézet"-ben)
+                const userTasks = allTasks
+                    .filter(task => task[FIELDS.Felelos] === user && task[FIELDS.Statusz] !== 'Kész')
+                    .sort((a, b) => {
+                        const prioA = a[FIELDS.Prioritas] || 99;
+                        const prioB = b[FIELDS.Prioritas] || 99;
+                        const hoursA = parseDecimal(a[FIELDS.BecsultOra] || 0);
+                        const hoursB = parseDecimal(b[FIELDS.BecsultOra] || 0);
+                        const dateA = a[FIELDS.Hatarido] ? new Date(a[FIELDS.Hatarido]) : null;
+                        const dateB = b[FIELDS.Hatarido] ? new Date(b[FIELDS.Hatarido]) : null;
+
+                        if (dateA && !dateB) return -1;
+                        if (!dateA && dateB) return 1;
+                        if (dateA && dateB) {
+                            if (dateA.getTime() !== dateB.getTime()) {
+                                return dateA.getTime() - dateB.getTime();
+                            }
+                        }
+                        if (prioA !== prioB) return prioA - prioB;
+                        return hoursA - hoursB;
+                    });
+                
+                let taskQueue = [...userTasks]; // Másolat a feladatokról, amiket "beáramoltatunk"
+                let currentTask = taskQueue.shift();
+                let currentTaskHoursLeft = currentTask ? parseDecimal(currentTask[FIELDS.BecsultOra]) : 0;
+                
+                // 4. Napok (H-P) kirajzolása
+                WEEK_DAYS.forEach((day, dayIndex) => {
+                    const dayCell = document.createElement('div');
+                    dayCell.className = 'day-cell';
+                    
+                    let hoursFilledInDay = 0;
+                    
+                    // 4a. Fix események elhelyezése a nap elején
+                    const eventsForDay = userFixEvents.filter(e => e[FIX_EVENT_FIELDS.Nap] === day);
+                    eventsForDay.forEach(event => {
+                        const eventHours = parseDecimal(event[FIX_EVENT_FIELDS.HosszOra]);
+                        if (hoursFilledInDay + eventHours > WORK_HOURS_PER_DAY) return; // Nem fér be
+                        
+                        const eventBlock = document.createElement('div');
+                        eventBlock.className = 'fix-event-block';
+                        eventBlock.style.left = `${(hoursFilledInDay / WORK_HOURS_PER_DAY) * 100}%`;
+                        eventBlock.style.width = `${(eventHours / WORK_HOURS_PER_DAY) * 100}%`;
+                        eventBlock.textContent = escapeHTML(event[FIX_EVENT_FIELDS.EsemenyNeve]);
+                        eventBlock.title = `${escapeHTML(event[FIX_EVENT_FIELDS.EsemenyNeve])} (${eventHours} óra)`;
+                        dayCell.appendChild(eventBlock);
+                        
+                        hoursFilledInDay += eventHours;
+                    });
+
+                    // 4b. Feladatok "beáramoltatása" a maradék helyre
+                    while (hoursFilledInDay < WORK_HOURS_PER_DAY && currentTask) {
+                        const hoursAvailableInDay = WORK_HOURS_PER_DAY - hoursFilledInDay;
+                        const hoursToPlace = Math.min(hoursAvailableInDay, currentTaskHoursLeft);
+                        
+                        const taskBlock = document.createElement('div');
+                        taskBlock.className = 'task-block';
+                        taskBlock.style.left = `${(hoursFilledInDay / WORK_HOURS_PER_DAY) * 100}%`;
+                        taskBlock.style.width = `${(hoursToPlace / WORK_HOURS_PER_DAY) * 100}%`;
+                        taskBlock.textContent = escapeHTML(currentTask[FIELDS.FeladatCim]);
+                        taskBlock.title = `${escapeHTML(currentTask[FIELDS.FeladatCim])} - ${escapeHTML(currentTask[FIELDS.Projekt])} (${currentTaskHoursLeft} óra)`;
+                        dayCell.appendChild(taskBlock);
+                        
+                        hoursFilledInDay += hoursToPlace;
+                        currentTaskHoursLeft -= hoursToPlace;
+                        
+                        // Ha a feladat elfogyott, vesszük a következőt
+                        if (currentTaskHoursLeft <= 0) {
+                            currentTask = taskQueue.shift();
+                            currentTaskHoursLeft = currentTask ? parseDecimal(currentTask[FIELDS.BecsultOra]) : 0;
+                        }
+                    }
+                    
+                    dayLane.appendChild(dayCell);
+                });
+                
+                weeklyPlanGrid.appendChild(dayLane);
+            });
+        }
+        
+        /**
+         * 4. "Fix Események" nézet kirajzolása (ÚJ V2.0)
+         */
+        function renderFixEventView() {
+            fixEventTableBody.innerHTML = ''; // Táblázat ürítése
+            
+            if(allFixEvents.length === 0) {
+                 fixEventTableBody.innerHTML = `<tr><td colspan="5" class="text-center text-gray-500 py-4">Nincsenek rögzített fix események (pl. meetingek).</td></tr>`;
+                 return;
+            }
+            
+            allFixEvents
+                .sort((a,b) => a[FIX_EVENT_FIELDS.Felelos].localeCompare(b[FIX_EVENT_FIELDS.Felelos]) || a[FIX_EVENT_FIELDS.EsemenyNeve].localeCompare(b[FIX_EVENT_FIELDS.EsemenyNeve]))
+                .forEach(event => {
+                    const tr = document.createElement('tr');
+                    tr.dataset.eventId = event[FIX_EVENT_FIELDS.ID];
+                    tr.innerHTML = `
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${escapeHTML(event[FIX_EVENT_FIELDS.EsemenyNeve])}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${escapeHTML(event[FIX_EVENT_FIELDS.Felelos])}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${escapeHTML(event[FIX_EVENT_FIELDS.Nap])}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${parseDecimal(event[FIX_EVENT_FIELDS.HosszOra])} ó</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                            <button class="edit-fix-event-btn text-indigo-600 hover:text-indigo-900">Szerkesztés</button>
+                            <button class="delete-fix-event-btn text-red-600 hover:text-red-900">Törlés</button>
+                        </td>
+                    `;
+                    fixEventTableBody.appendChild(tr);
+                });
+        }
+
 
         // === KÁRTYA KÉSZÍTŐ FÜGGVÉNYEK (HTML GENERÁLÁS) ===
 
-        /**
-         * HTML kártya generálása a "Saját Feladataim" nézethez
-         */
         function createMyTaskCard(task) {
             const div = document.createElement('div');
             div.className = 'task-card bg-white p-4 rounded-lg shadow-md grid grid-cols-1 md:grid-cols-5 gap-4 items-start';
@@ -557,17 +935,16 @@
 
             const dependency = allTasks.find(t => t[FIELDS.ID] == task[FIELDS.Fuggoseg_ID]);
             const depText = dependency ? 
-                `<span class="font-medium text-yellow-700"> Vár erre: ${escapeHTML(dependency[FIELDS.FeladatCim])} (${dependency[FIELDS.Statusz]})</span>` : 
+                `<span class="font-medium text-yellow-700"> Vár erre: ${escapeHTML(dependency[FIELDS.FeladatCim])} (${escapeHTML(dependency[FIELDS.Projekt])})</span>` : 
                 '';
             const depBlocked = (dependency && dependency[FIELDS.Statusz] !== 'Kész');
             
-            // 6. MÓDOSÍTÁS: Határidő formázása
             const hatarido = formatDate(task[FIELDS.Hatarido]);
             const isOverdue = task[FIELDS.Hatarido] && new Date(task[FIELDS.Hatarido]) < new Date() && task[FIELDS.Statusz] !== 'Kész';
 
             div.innerHTML = `
                 <div class="md:col-span-2">
-                    <!-- 11. MÓDOSÍTÁS: Projekt név stílusának módosítása (már nem "cimke") -->
+                    <!-- 11. MÓDOSÍTÁS: Projekt név stílusának módosítása -->
                     <h3 class="text-lg font-semibold text-gray-800">${escapeHTML(task[FIELDS.Projekt])}</h3>
                     <h4 class="text-xl font-bold text-gray-900 mt-1">${escapeHTML(task[FIELDS.FeladatCim])}</h4>
                     
@@ -585,16 +962,16 @@
 
                 <div class="flex flex-col gap-2">
                     <!-- 12. MÓDOSÍTÁS: Szövegcsere -->
-                    <label class="text-sm font-medium text-gray-700">Ráfordított óraszám</label>
+                    <label for="valos_${task[FIELDS.ID]}" class="text-sm font-medium text-gray-700">Ráfordított óraszám</label>
                     <!-- 10. MÓDOSÍTÁS: Tizedesjegyek engedélyezése -->
-                    <input type="number" step="0.1" data-field="${FIELDS.ValosOra}" 
+                    <input type="number" id="valos_${task[FIELDS.ID]}" step="0.1" data-field="${FIELDS.ValosOra}" 
                            class="task-update-field task-blur-field w-full rounded-md border-gray-300 shadow-sm sm:text-sm" 
                            value="${parseDecimal(task[FIELDS.ValosOra] || 0)}">
                 </div>
                 
                 <div class="flex flex-col gap-2">
-                    <label class="text-sm font-medium text-gray-700">Státusz</label>
-                    <select data-field="${FIELDS.Statusz}" 
+                    <label for="statusz_${task[FIELDS.ID]}" class="text-sm font-medium text-gray-700">Státusz</label>
+                    <select id="statusz_${task[FIELDS.ID]}" data-field="${FIELDS.Statusz}" 
                             class="task-update-field w-full rounded-md border-gray-300 shadow-sm sm:text-sm ${depBlocked ? 'bg-gray-200 cursor-not-allowed' : ''}"
                             ${depBlocked ? 'disabled' : ''}>
                         <option value="Új" ${task[FIELDS.Statusz] === 'Új' ? 'selected' : ''}>Új</option>
@@ -606,9 +983,6 @@
             return div;
         }
 
-        /**
-         * HTML kártya generálása a "Projektek" listához
-         */
         function createProjectCard(projectName, tasks) {
             const div = document.createElement('div');
             const isSelected = (projectName === selectedProjectName);
@@ -629,17 +1003,12 @@
             return div;
         }
         
-        /**
-         * HTML kártya generálása a "Tervezői" feladatnézethez
-         */
         function createLeaderTaskCard(task) {
             const div = document.createElement('div');
             div.className = 'task-card bg-white p-4 rounded-lg shadow-md flex justify-between items-center';
             div.dataset.taskId = task[FIELDS.ID];
 
-            // 7. MÓDOSÍTÁS: Függőség lekérése (ID elrejtve)
             const dependency = allTasks.find(t => t[FIELDS.ID] == task[FIELDS.Fuggoseg_ID]);
-            // 6. MÓDOSÍTÁS: Határidő lekérése
             const hatarido = formatDate(task[FIELDS.Hatarido]);
             const isOverdue = task[FIELDS.Hatarido] && new Date(task[FIELDS.Hatarido]) < new Date() && task[FIELDS.Statusz] !== 'Kész';
             
@@ -652,7 +1021,6 @@
                     </p>
                     <p class="text-sm text-gray-500">
                         Becsült: ${parseDecimal(task[FIELDS.BecsultOra] || 0)}ó |
-                        <!-- 12. MÓDOSÍTÁS: Szövegcsere -->
                         Ráfordított: ${parseDecimal(task[FIELDS.ValosOra] || 0)}ó |
                         Függ: ${dependency ? `${escapeHTML(dependency[FIELDS.FeladatCim])} (${escapeHTML(dependency[FIELDS.Projekt])})` : 'N/A'}
                     </p>
@@ -680,7 +1048,7 @@
                 taskProjekt.value = task[FIELDS.Projekt];
                 taskFeladatCim.value = task[FIELDS.FeladatCim];
                 taskFelelos.value = task[FIELDS.Felelos];
-                taskHatarido.value = task[FIELDS.Hatarido] ? task[FIELDS.Hatarido].split('T')[0] : ""; // Dátum formázása
+                taskHatarido.value = task[FIELDS.Hatarido] || "";
                 taskBecsultOra.value = parseDecimal(task[FIELDS.BecsultOra] || 0);
 
             } else {
@@ -693,22 +1061,19 @@
                 }
             }
             
-            // 7. MÓDOSÍTÁS: Függőség választó feltöltése (ÖSSZES feladattal)
+            // 7. MÓDOSÍTÁS: Függőség választó feltöltése
             taskFuggoseg_ID.innerHTML = '<option value="">Nincs</option>';
             allTasks
                 .sort((a,b) => a[FIELDS.Projekt].localeCompare(b[FIELDS.Projekt]) || a[FIELDS.FeladatCim].localeCompare(b[FIELDS.FeladatCim]))
                 .forEach(t => {
-                    // Ne lehessen önmaga függősége
-                    if (isEditing && t[FIELDS.ID] === task[FIELDS.ID]) {
-                        return;
-                    }
+                    if (isEditing && t[FIELDS.ID] === task[FIELDS.ID]) return;
+                    
                     const option = document.createElement('option');
                     option.value = t[FIELDS.ID];
                     option.textContent = `${escapeHTML(t[FIELDS.FeladatCim])} (${escapeHTML(t[FIELDS.Projekt])})`;
                     taskFuggoseg_ID.appendChild(option);
                 });
             
-            // Ha szerkesztünk, állítsuk be a mentett függőséget
             if(isEditing) {
                 taskFuggoseg_ID.value = task[FIELDS.Fuggoseg_ID] || "";
             }
@@ -716,8 +1081,31 @@
             taskModal.classList.remove('hidden');
         }
         
+        function openFixEventModal(event = null) {
+            isFixEventEditing = !!event;
+            fixEventForm.reset();
+            
+            if(isFixEventEditing) {
+                fixEventModalTitle.textContent = "Fix Esemény Szerkesztése";
+                fixEventID.value = event[FIX_EVENT_FIELDS.ID];
+                fixEventEsemenyNeve.value = event[FIX_EVENT_FIELDS.EsemenyNeve];
+                fixEventFelelos.value = event[FIX_EVENT_FIELDS.Felelos];
+                fixEventNap.value = event[FIX_EVENT_FIELDS.Nap];
+                fixEventHosszOra.value = parseDecimal(event[FIX_EVENT_FIELDS.HosszOra]);
+            } else {
+                fixEventModalTitle.textContent = "Új Fix Esemény Létrehozása";
+                fixEventID.value = "";
+            }
+            
+            fixEventModal.classList.remove('hidden');
+        }
+        
         function closeTaskModal() {
             taskModal.classList.add('hidden');
+        }
+        
+        function closeFixEventModal() {
+            fixEventModal.classList.add('hidden');
         }
 
 
@@ -729,27 +1117,18 @@
             renderMyTasksView();
         });
 
-        // Nézetváltó gomb
-        toggleViewBtn.addEventListener('click', () => {
-            currentView = (currentView === 'myTasks') ? 'leader' : 'myTasks';
-            // 3. MÓDOSÍTÁS: Gomb szöveg
-            toggleViewBtn.textContent = (currentView === 'myTasks') ? 'Váltás Tervezői Nézetre' : 'Váltás Saját Nézetre';
-            
-            if (currentView === 'myTasks') {
-                selectedProjectName = null;
-            }
-            renderAllViews();
-        });
+        // Nézetváltó gombok
+        myTasksViewBtn.addEventListener('click', () => switchView('myTasks'));
+        leaderViewBtn.addEventListener('click', () => switchView('leader'));
+        weeklyPlanViewBtn.addEventListener('click', () => switchView('weeklyPlan'));
         
-        // --- Tervezői Nézet Eseménykezelői ---
+        // --- Tervezői Nézet ---
         
         projectList.addEventListener('click', (e) => {
             const card = e.target.closest('.project-card');
             if (card) {
-                const projectName = card.dataset.projectName;
-                selectedProjectName = projectName;
+                selectedProjectName = card.dataset.projectName;
                 renderLeaderView(); // Újrarajzolás, ami kiemeli a kártyát
-                // renderTasksForProject(projectName); // Már a renderLeaderView hívja
             }
         });
 
@@ -764,12 +1143,11 @@
              }
         });
         
-        // --- Űrlap (Modal) Eseménykezelői ---
+        showFixEventViewBtn.addEventListener('click', () => switchView('fixEvent'));
         
-        showNewTaskFormBtn.addEventListener('click', () => {
-            openTaskModal(null);
-        });
+        // --- Feladat Modal ---
         
+        showNewTaskFormBtn.addEventListener('click', () => openTaskModal(null));
         cancelTaskBtn.addEventListener('click', closeTaskModal);
         
         taskForm.addEventListener('submit', async (e) => {
@@ -780,14 +1158,12 @@
                 [FIELDS.Projekt]: taskProjekt.value.trim(),
                 [FIELDS.FeladatCim]: taskFeladatCim.value.trim(),
                 [FIELDS.Felelos]: taskFelelos.value,
-                // 9. MÓDOSÍTÁS: Alapértelmezett prioritás
-                [FIELDS.Prioritas]: isEditing ? allTasks.find(t=>t[FIELDS.ID] == taskID.value)[FIELDS.Prioritas] : 2,
-                // 6. MÓDOSÍTÁS: Határidő
                 [FIELDS.Hatarido]: taskHatarido.value || "",
-                // 10. MÓDOSÍTÁS: Tizedesjegyek kezelése
                 [FIELDS.BecsultOra]: parseDecimal(taskBecsultOra.value),
                 [FIELDS.Fuggoseg_ID]: taskFuggoseg_ID.value || "",
-                // Státusz és Valós óra: marad a régi, ha szerkesztünk, vagy alapértelmezett, ha új
+                
+                // 9. MÓDOSÍTÁS: Alapértelmezett prioritás
+                [FIELDS.Prioritas]: isEditing ? allTasks.find(t=>t[FIELDS.ID] == taskID.value)[FIELDS.Prioritas] : 2,
                 [FIELDS.Statusz]: isEditing ? allTasks.find(t=>t[FIELDS.ID] == taskID.value)[FIELDS.Statusz] : 'Új',
                 [FIELDS.ValosOra]: isEditing ? parseDecimal(allTasks.find(t=>t[FIELDS.ID] == taskID.value)[FIELDS.ValosOra]) : 0
             };
@@ -800,6 +1176,47 @@
             await saveTask(taskData);
         });
         
+        
+        // --- Fix Esemény Modal és Táblázat ---
+        
+        showNewFixEventFormBtn.addEventListener('click', () => openFixEventModal(null));
+        cancelFixEventBtn.addEventListener('click', closeFixEventModal);
+        
+        fixEventTableBody.addEventListener('click', (e) => {
+            const target = e.target;
+            const eventId = target.closest('tr').dataset.eventId;
+            
+            if (target.classList.contains('edit-fix-event-btn')) {
+                const eventToEdit = allFixEvents.find(e => e[FIX_EVENT_FIELDS.ID] == eventId);
+                if (eventToEdit) {
+                    openFixEventModal(eventToEdit);
+                }
+            }
+            
+            if (target.classList.contains('delete-fix-event-btn')) {
+                deleteFixEvent(eventId);
+            }
+        });
+        
+        fixEventForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const eventData = {
+                [FIX_EVENT_FIELDS.ID]: fixEventID.value || null,
+                [FIX_EVENT_FIELDS.EsemenyNeve]: fixEventEsemenyNeve.value.trim(),
+                [FIX_EVENT_FIELDS.Felelos]: fixEventFelelos.value,
+                [FIX_EVENT_FIELDS.Nap]: fixEventNap.value,
+                [FIX_EVENT_FIELDS.HosszOra]: parseDecimal(fixEventHosszOra.value)
+            };
+            
+            if (!eventData[FIX_EVENT_FIELDS.EsemenyNeve] || !eventData[FIX_EVENT_FIELDS.Felelos] || !eventData[FIX_EVENT_FIELDS.HosszOra]) {
+                alert("Minden mező kitöltése kötelező.");
+                return;
+            }
+            
+            await saveFixEvent(eventData);
+        });
+
         
         // --- Feladat Gyors-Frissítési Eseménykezelők (Saját nézet) ---
         
@@ -814,7 +1231,7 @@
             const fieldName = target.dataset.field;
             let fieldValue = target.value;
 
-            // 10. MÓDOSÍTÁS: Tizedesjegyek kezelése
+            // 10. MÓDOSÍTÁS
             if (target.type === 'number') {
                 fieldValue = parseDecimal(fieldValue);
             }
@@ -843,7 +1260,6 @@
             }
         }
 
-        // Indítás!
         main();
 
     </script>
